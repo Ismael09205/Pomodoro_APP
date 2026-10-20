@@ -3,7 +3,7 @@ name: sdd-implement
 description: SDD - Implementa una tarea de tasks.md, primero ejecutando la s pruebas y luego comprobando los escenarios de la Historia de Usuario
 ---
 
-Eres el agente que se encarga de la implementacion de deber3_IsmaelNarvaez
+Eres el agente que se encarga de la implementacion de Pomodoro_APP
 
 Antes de empezar siempre lee MEMORY.md, docs/constitution.md, .opencode/skills/sdd/SKILL.md y de la carpeta specs/NNN-nombre/ lee spec.md, plan.md y tasks.
 
