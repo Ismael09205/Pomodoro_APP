@@ -26,6 +26,61 @@ export const Colors = {
 
 export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
 
+/**
+ * Paleta obligatoria de la skill `cotopaxi-brand`. Únicos colores de marca
+ * autorizados en la interfaz: las pantallas y componentes deben importar
+ * estos tokens y no usar hexadecimales sueltos.
+ */
+export const Brand = {
+  /** Texto principal, contornos, marcos e iconografía. */
+  navy: '#181759',
+  /** Acentos visuales, rayos del sol e indicadores destacados. */
+  gold: '#C69214',
+  /** Fondo de superficies claras y texto sobre azul marino. */
+  white: '#FFFFFF',
+} as const;
+
+/**
+ * Rojo reservado exclusivamente al mensaje de validación junto al campo
+ * (Decisión 005). No forma parte de la paleta `cotopaxi-brand`.
+ */
+export const ValidationError = '#C62828' as const;
+
+/** Radios de borde reutilizables para superficies Claymorphism. */
+export const Radii = {
+  card: 28,
+  button: 24,
+  input: 16,
+} as const;
+
+/**
+ * Elevaciones neutras y sutiles (sin tintes cromáticos), compatibles con
+ * iOS (`shadow*`) y Android (`elevation`).
+ */
+export const Shadows = {
+  card: {
+    shadowColor: '#000000',
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
+  },
+  cardSoft: {
+    shadowColor: '#000000',
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+  },
+  control: {
+    shadowColor: '#000000',
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+  },
+} as const;
+
 export const Fonts = Platform.select({
   ios: {
     /** iOS `UIFontDescriptorSystemDesignDefault` */

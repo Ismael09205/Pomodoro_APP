@@ -64,7 +64,9 @@ export type PomodoroSession = {
   // Cantidad de pomodoros por ciclo vigente (RF-09; Constitución 11).
   pomodorosPerCycle: number;
   // Estado de aviso activo (RF-04, RF-09): mientras es cierto, la pantalla
-  // muestra "fase terminada / aviso activo" sin contador y con "Detener".
+  // muestra "fase terminada / aviso activo" sin contador y con el botón de
+  // aviso: "Continuar", o "Finalizar" si terminó el descanso largo (la spec
+  // 004 lo llamaba "Detener"; el comportamiento es el mismo).
   alarmActive: boolean;
   alarmContent: AlarmContent | null;
   // Mensaje de permiso de notificaciones pendiente (RF-06, RF-07), si lo hay.

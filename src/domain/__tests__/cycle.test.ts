@@ -33,9 +33,9 @@ describe('cycle: transición al 00:00 de un tiempo de estudio', () => {
     expect(advanceCycle(emptyCycle(), 4)).toEqual({ phase: 'shortBreak', pomodoros: 1 });
   });
 
-  it('al alcanzar la cantidad configurada deja descanso largo y el contador vuelve a cero (RF-03)', () => {
+  it('al alcanzar la cantidad configurada deja descanso largo con el contador completo 4/4 (RF-03; ajuste 20/10/2026)', () => {
     const cycle: CycleState = { phase: 'study', pomodoros: 3 };
-    expect(advanceCycle(cycle, 4)).toEqual({ phase: 'longBreak', pomodoros: 0 });
+    expect(advanceCycle(cycle, 4)).toEqual({ phase: 'longBreak', pomodoros: 4 });
   });
 
   it('no muta el estado recibido', () => {
@@ -51,8 +51,8 @@ describe('cycle: transición al 00:00 de un descanso', () => {
     expect(advanceCycle(cycle, 4)).toEqual({ phase: 'study', pomodoros: 2 });
   });
 
-  it('descanso largo terminado deja el siguiente estudio con el contador intacto (RF-04, RF-09)', () => {
-    const cycle: CycleState = { phase: 'longBreak', pomodoros: 0 };
+  it('descanso largo terminado inicia el nuevo ciclo con el contador en cero (RF-04; ajuste 20/10/2026)', () => {
+    const cycle: CycleState = { phase: 'longBreak', pomodoros: 4 };
     expect(advanceCycle(cycle, 4)).toEqual({ phase: 'study', pomodoros: 0 });
   });
 
@@ -147,17 +147,17 @@ describe('cycle: nextTimerFor crea la siguiente fase con la duración configurad
 });
 
 describe('cycle: advanceCycle con pomodoros por ciclo personalizado (RF-09, Decisión 003)', () => {
-  it('contador que ya supera el nuevo valor (5 con perCycle 3) deja descanso largo', () => {
+  it('contador que ya supera el nuevo valor (5 con perCycle 3) deja descanso largo con el contador acotado al tope', () => {
     expect(advanceCycle({ phase: 'study', pomodoros: 5 }, 3)).toEqual({
       phase: 'longBreak',
-      pomodoros: 0,
+      pomodoros: 3,
     });
   });
 
-  it('contador que alcanza exactamente el nuevo valor deja descanso largo', () => {
+  it('contador que alcanza exactamente el nuevo valor deja descanso largo con el contador completo', () => {
     expect(advanceCycle({ phase: 'study', pomodoros: 3 }, 3)).toEqual({
       phase: 'longBreak',
-      pomodoros: 0,
+      pomodoros: 3,
     });
   });
 
@@ -168,10 +168,10 @@ describe('cycle: advanceCycle con pomodoros por ciclo personalizado (RF-09, Deci
     });
   });
 
-  it('con 1 pomodoro por ciclo el primer estudio completo deja descanso largo', () => {
+  it('con 1 pomodoro por ciclo el primer estudio completo deja descanso largo con 1/1 (punto encendido)', () => {
     expect(advanceCycle({ phase: 'study', pomodoros: 0 }, 1)).toEqual({
       phase: 'longBreak',
-      pomodoros: 0,
+      pomodoros: 1,
     });
   });
 });
@@ -190,5 +190,10 @@ describe('cycle: textos de la pantalla principal (RF-08, Decisión 008)', () => 
 
   it('con el descanso largo listo muestra "Pomodoros: 0/4"', () => {
     expect(pomodoroText({ phase: 'longBreak', pomodoros: 0 }, 4)).toBe('Pomodoros: 0/4');
+  });
+
+  it('acota el contador mostrado al tope vigente si lo supera', () => {
+    expect(pomodoroText({ phase: 'study', pomodoros: 5 }, 3)).toBe('Pomodoros: 3/3');
+    expect(pomodoroText({ phase: 'longBreak', pomodoros: 4 }, 4)).toBe('Pomodoros: 4/4');
   });
 });

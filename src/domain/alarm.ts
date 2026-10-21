@@ -6,6 +6,8 @@ export type AlarmState = 'idle' | 'active';
 export type AlarmContent = {
   title: string;
   body: string;
+  /** Fase que acaba de terminar; permite a la interfaz decidir la acción. */
+  endedPhase: StudyPhase;
   endedPhaseLabel: string;
   nextPhaseLabel: string;
 };
@@ -21,6 +23,7 @@ export const getAlarmContent = (
   return {
     title: `${endedPhaseLabel} terminado`,
     body: `Siguiente: ${nextPhaseLabel}`,
+    endedPhase,
     endedPhaseLabel,
     nextPhaseLabel,
   };

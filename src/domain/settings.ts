@@ -27,11 +27,16 @@ export const DEFAULT_SETTINGS: PomodoroSettings = {
   pomodorosPerCycle: DEFAULT_PHASE_DURATIONS.pomodorosPerCycle,
 };
 
-/** Duraciones de 1 a 120 minutos; pomodoros por ciclo de 1 a 12 (Decisión 001). */
+/**
+ * Estudio de 1 a 120 minutos; descanso corto de 1 a 6; descanso largo de 1 a 15;
+ * pomodoros por ciclo de 1 a 12 (Decisión 001 de la spec 005 con el ajuste de
+ * topes de descanso autorizado por el usuario el 20/10/2026; su registro en
+ * `specs/005-ajustar-tiempos-pomodoro/decisiones.md` corresponde al usuario).
+ */
 export const SETTINGS_RANGES: Record<SettingsField, { min: number; max: number }> = {
   studyMinutes: { min: 1, max: 120 },
-  shortBreakMinutes: { min: 1, max: 120 },
-  longBreakMinutes: { min: 1, max: 120 },
+  shortBreakMinutes: { min: 1, max: 6 },
+  longBreakMinutes: { min: 1, max: 15 },
   pomodorosPerCycle: { min: 1, max: 12 },
 };
 

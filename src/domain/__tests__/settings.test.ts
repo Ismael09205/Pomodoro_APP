@@ -26,16 +26,22 @@ const DURATION_FIELDS: SettingsField[] = [
 
 const validInput = (): SettingsInput => ({
   studyMinutes: '45',
-  shortBreakMinutes: '10',
-  longBreakMinutes: '20',
+  shortBreakMinutes: '5',
+  longBreakMinutes: '10',
   pomodorosPerCycle: '3',
 });
 
-describe('settings: rangos permitidos (RF-04, Decisión 001)', () => {
-  it('duraciones: enteros de 1 a 120 minutos en los tres campos de tiempo', () => {
+describe('settings: rangos permitidos (RF-04; Decisión 001 con ajuste de topes del 20/10/2026)', () => {
+  it('estudio: entero de 1 a 120 minutos', () => {
     expect(SETTINGS_RANGES.studyMinutes).toEqual({ min: 1, max: 120 });
-    expect(SETTINGS_RANGES.shortBreakMinutes).toEqual({ min: 1, max: 120 });
-    expect(SETTINGS_RANGES.longBreakMinutes).toEqual({ min: 1, max: 120 });
+  });
+
+  it('descanso corto: entero de 1 a 6 minutos', () => {
+    expect(SETTINGS_RANGES.shortBreakMinutes).toEqual({ min: 1, max: 6 });
+  });
+
+  it('descanso largo: entero de 1 a 15 minutos', () => {
+    expect(SETTINGS_RANGES.longBreakMinutes).toEqual({ min: 1, max: 15 });
   });
 
   it('pomodoros por ciclo: entero de 1 a 12', () => {
@@ -66,7 +72,7 @@ describe('settings: validateSettingsField rechaza valores no válidos (RF-04)', 
     });
 
     it(`${field}: un valor fuera del rango superior es inválido y su mensaje indica el rango`, () => {
-      const above = field === 'pomodorosPerCycle' ? '13' : '121';
+      const above = String(SETTINGS_RANGES[field].max + 1);
       const result = validateSettingsField(field, above);
       expect(result.valid).toBe(false);
       expect(result.message).toBe(
@@ -97,8 +103,8 @@ describe('settings: validateSettingsForm valida de forma atómica (RF-05, Decisi
     const result = validateSettingsForm(validInput());
     expect(result.values).toEqual({
       studyMinutes: 45,
-      shortBreakMinutes: 10,
-      longBreakMinutes: 20,
+      shortBreakMinutes: 5,
+      longBreakMinutes: 10,
       pomodorosPerCycle: 3,
     });
     expect(result.errors).toEqual({
@@ -136,7 +142,7 @@ describe('settings: validateSettingsForm valida de forma atómica (RF-05, Decisi
     const result = validateSettingsForm(input);
     expect(result.values).toBeNull();
     expect(result.errors.studyMinutes).toBe('Ingresa un número entre 1 y 120');
-    expect(result.errors.longBreakMinutes).toBe('Ingresa un número entre 1 y 120');
+    expect(result.errors.longBreakMinutes).toBe('Ingresa un número entre 1 y 15');
     expect(result.errors.shortBreakMinutes).toBeNull();
   });
 
@@ -145,7 +151,7 @@ describe('settings: validateSettingsForm valida de forma atómica (RF-05, Decisi
     input.shortBreakMinutes = 'diez';
     const result = validateSettingsForm(input);
     expect(result.values).toBeNull();
-    expect(result.errors.shortBreakMinutes).toBe('Ingresa un número entre 1 y 120');
+    expect(result.errors.shortBreakMinutes).toBe('Ingresa un número entre 1 y 6');
   });
 });
 

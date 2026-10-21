@@ -36,17 +36,28 @@ export const durationForPhase = (
 /**
  * Única función que muta el contador del ciclo; se invoca exclusivamente
  * cuando una fase llega a 00:00 (RF-01 a RF-04, RF-09, RF-10).
+ *
+ * El descanso largo conserva el contador (acotado al tope) para que la
+ * pantalla pueda mostrar el ciclo completo, N/N; el reinicio a cero ocurre
+ * al terminarlo, cuando comienza el nuevo ciclo (RF-03 con el ajuste
+ * autorizado el 20/10/2026; el registro en las decisiones de la spec 002
+ * corresponde al usuario).
  */
 export const advanceCycle = (
   cycle: CycleState,
   pomodorosPerCycle: number,
 ): CycleState => {
+  if (cycle.phase === 'longBreak') {
+    return { phase: 'study', pomodoros: 0 };
+  }
   if (cycle.phase !== 'study') {
     return { phase: 'study', pomodoros: cycle.pomodoros };
   }
   const pomodoros = cycle.pomodoros + 1;
   if (pomodoros >= pomodorosPerCycle) {
-    return { phase: 'longBreak', pomodoros: 0 };
+    // Acota también el caso en que el contador ya superaba el tope vigente
+    // (cambio de ajuste a mitad de ciclo; RF-09 de la spec 005).
+    return { phase: 'longBreak', pomodoros: Math.min(pomodoros, pomodorosPerCycle) };
   }
   return { phase: 'shortBreak', pomodoros };
 };
@@ -73,7 +84,13 @@ export const phaseLabel = (phase: StudyPhase): string => {
   }
 };
 
+/**
+ * Texto del contador para la pantalla. Acota el mostrado al tope vigente para
+ * no pintar nunca un contador mayor que el total (p. ej. "5/3" tras reducir
+ * "pomodoros por ciclo" con un ciclo en curso; RF-09 de la spec 005).
+ */
 export const pomodoroText = (
   cycle: CycleState,
   pomodorosPerCycle: number,
-): string => `Pomodoros: ${cycle.pomodoros}/${pomodorosPerCycle}`;
+): string =>
+  `Pomodoros: ${Math.min(cycle.pomodoros, pomodorosPerCycle)}/${pomodorosPerCycle}`;

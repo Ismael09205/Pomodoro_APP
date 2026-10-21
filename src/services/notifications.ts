@@ -1,20 +1,38 @@
 import { Platform } from 'react-native';
-import * as Notifications from 'expo-notifications';
+import type * as NotificationsTypes from 'expo-notifications';
 
 import type { NotificationPermissionStatus } from '../domain/alarm';
 
+// Carga segura: en Expo Go falta el módulo nativo y el import lanzaría un error
+// que impediría abrir la app. Si no está disponible, los avisos se desactivan.
+const loadNotifications = (): typeof NotificationsTypes | null => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require('expo-notifications');
+  } catch (error) {
+    console.warn('[DIAG] expo-notifications no está disponible en este entorno.', error);
+    return null;
+  }
+};
+
+const Notifications = loadNotifications();
+
 // Identificador del canal Android de alta importancia y vibración.
-export const ALARM_CHANNEL_ID = 'pomodoro-alarm';
+// El id cambió (v2) porque Android no permite modificar un canal ya creado.
+export const ALARM_CHANNEL_ID = 'pomodoro-alarm-v2';
 
 // Patrón de vibración del aviso (RF-01, RF-02).
 const VIBRATION_PATTERN = [0, 500, 400, 500, 400, 500];
 
-const notificationContent = (params: { title: string; body: string }) => ({
+const notificationContent = (
+  N: typeof NotificationsTypes,
+  params: { title: string; body: string },
+) => ({
   title: params.title,
   body: params.body,
   sound: 'default' as const,
   vibrate: VIBRATION_PATTERN,
-  priority: Notifications.AndroidNotificationPriority.MAX,
+  priority: N.AndroidNotificationPriority.MAX,
   sticky: true,
   autoDismiss: false,
 });
@@ -26,7 +44,7 @@ let handlerConfigured = false;
  * sonido y badge) aun cuando la app está en primer plano (RF-08; Decisión 008).
  */
 export const configureNotificationHandler = (): void => {
-  if (handlerConfigured) return;
+  if (handlerConfigured || !Notifications) return;
   try {
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
@@ -47,6 +65,7 @@ export const configureNotificationHandler = (): void => {
  * vibración. El sistema y los ajustes del usuario pueden limitar el aviso.
  */
 export const ensureAlarmChannel = async (): Promise<void> => {
+  if (!Notifications) return;
   if (Platform.OS !== 'android') {
     console.log('[DIAG] Canal de aviso: no aplica (no es Android).');
     return;
@@ -55,7 +74,7 @@ export const ensureAlarmChannel = async (): Promise<void> => {
     const channel = await Notifications.setNotificationChannelAsync(ALARM_CHANNEL_ID, {
       name: 'Aviso Pomodoro',
       importance: Notifications.AndroidImportance.MAX,
-      sound: 'default',
+      // Sin la clave `sound`, Android usa el sonido de notificación predeterminado.
       vibrationPattern: VIBRATION_PATTERN,
       enableVibrate: true,
       bypassDnd: false,
@@ -73,7 +92,7 @@ export const ensureAlarmChannel = async (): Promise<void> => {
 };
 
 const mapStatus = (
-  status: Notifications.NotificationPermissionsStatus,
+  status: NotificationsTypes.NotificationPermissionsStatus,
 ): NotificationPermissionStatus => {
   if (status?.granted) return 'granted';
   if (status?.status === 'denied' || status?.canAskAgain === false) {
@@ -87,6 +106,7 @@ const mapStatus = (
  * (RF-06, RF-07).
  */
 export const getPermissionStatus = async (): Promise<NotificationPermissionStatus> => {
+  if (!Notifications) return 'denied';
   try {
     const status = await Notifications.getPermissionsAsync();
     console.log('[DIAG] Permiso (get):', {
@@ -108,6 +128,7 @@ export const getPermissionStatus = async (): Promise<NotificationPermissionStatu
  * Decisión 009).
  */
 export const systemCanPrompt = async (): Promise<boolean> => {
+  if (!Notifications) return false;
   try {
     const status = await Notifications.getPermissionsAsync();
     return status.canAskAgain;
@@ -122,6 +143,7 @@ export const systemCanPrompt = async (): Promise<boolean> => {
  */
 export const requestPermission =
   async (): Promise<NotificationPermissionStatus> => {
+    if (!Notifications) return 'denied';
     try {
       const status = await Notifications.requestPermissionsAsync();
       console.log('[DIAG] Permiso (request):', {
@@ -145,6 +167,7 @@ export const showAlarmNotification = async (params: {
   title: string;
   body: string;
 }): Promise<string | null> => {
+  if (!Notifications) return null;
   const trigger =
     Platform.OS === 'android'
       ? { channelId: ALARM_CHANNEL_ID }
@@ -157,7 +180,7 @@ export const showAlarmNotification = async (params: {
   });
   try {
     const id = await Notifications.scheduleNotificationAsync({
-      content: notificationContent(params),
+      content: notificationContent(Notifications, params),
       trigger,
     });
     console.log('[DIAG] Aviso programado con id:', id);
@@ -177,14 +200,15 @@ export const scheduleAlarmNotification = async (params: {
   body: string;
   triggerAtMs: number;
 }): Promise<string | null> => {
-  const trigger: Notifications.NotificationTriggerInput = {
+  if (!Notifications) return null;
+  const trigger: NotificationsTypes.NotificationTriggerInput = {
     type: Notifications.SchedulableTriggerInputTypes.DATE,
     date: params.triggerAtMs,
     ...(Platform.OS === 'android' ? { channelId: ALARM_CHANNEL_ID } : {}),
   };
   try {
     const id = await Notifications.scheduleNotificationAsync({
-      content: notificationContent(params),
+      content: notificationContent(Notifications, params),
       trigger,
     });
     console.log('[DIAG] Aviso futuro programado con id:', id);
@@ -198,7 +222,7 @@ export const scheduleAlarmNotification = async (params: {
 export const cancelScheduledAlarmNotification = async (
   identifier: string | null,
 ): Promise<void> => {
-  if (!identifier) return;
+  if (!identifier || !Notifications) return;
   try {
     await Notifications.cancelScheduledNotificationAsync(identifier);
   } catch (error) {
@@ -212,6 +236,7 @@ export const cancelScheduledAlarmNotification = async (
 export const stopAlarmNotification = async (
   identifier: string | null,
 ): Promise<void> => {
+  if (!Notifications) return;
   try {
     if (identifier) {
       await cancelScheduledAlarmNotification(identifier);

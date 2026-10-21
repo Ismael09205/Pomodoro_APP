@@ -9,6 +9,7 @@ import {
 describe('domain/alarm', () => {
   it('getAlarmContent incluye fase terminada y siguiente fase', () => {
     const content = getAlarmContent('study', 'shortBreak');
+    expect(content.endedPhase).toBe('study');
     expect(content.endedPhaseLabel).toBe('Estudio');
     expect(content.nextPhaseLabel).toBe('Descanso corto');
     expect(content.body).toContain('Descanso corto');
@@ -60,5 +61,11 @@ describe('domain/alarm', () => {
     expect(getAlarmContent('study', 'shortBreak').title).toBe('Estudio terminado');
     expect(getAlarmContent('shortBreak', 'study').title).toBe('Descanso corto terminado');
     expect(getAlarmContent('longBreak', 'study').title).toBe('Descanso largo terminado');
+  });
+
+  it('getAlarmContent expone la fase terminada, que cierra el ciclo al ser el descanso largo', () => {
+    expect(getAlarmContent('study', 'shortBreak').endedPhase).toBe('study');
+    expect(getAlarmContent('shortBreak', 'study').endedPhase).toBe('shortBreak');
+    expect(getAlarmContent('longBreak', 'study').endedPhase).toBe('longBreak');
   });
 });

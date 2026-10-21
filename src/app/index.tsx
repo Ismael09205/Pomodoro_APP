@@ -1,8 +1,12 @@
-import { useCallback, useEffect } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useCallback, useEffect, useState, type ComponentProps } from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Fonts } from '@/constants/theme';
+import { Brand, Fonts, Radii, Shadows, Spacing } from '@/constants/theme';
+import { BrandButton } from '@/components/brand-button';
+import { BrandDialog } from '@/components/brand-dialog';
+import { Skeleton } from '@/components/skeleton';
 import { usePomodoroSession } from '@/hooks/use-pomodoro-session';
 import { phaseLabel, pomodoroText } from '@/domain/cycle';
 import { formatRemaining } from '@/domain/timer';
@@ -12,9 +16,7 @@ import {
 } from '@/storage/notifications-permission';
 import { requestPermission } from '@/services/notifications';
 
-const BRAND_NAVY = '#181759';
-const BRAND_GOLD = '#C69214';
-const BRAND_WHITE = '#FFFFFF';
+type IconName = ComponentProps<typeof Ionicons>['name'];
 
 const CONTROL_LABELS: Record<string, string> = {
   start: 'Iniciar',
@@ -23,12 +25,33 @@ const CONTROL_LABELS: Record<string, string> = {
   reset: 'Reiniciar',
 };
 
+const CONTROL_ICONS: Record<string, IconName> = {
+  start: 'play',
+  pause: 'pause',
+  resume: 'play',
+  reset: 'refresh',
+};
+
+const PHASE_ICONS: Record<string, IconName> = {
+  study: 'book',
+  shortBreak: 'cafe',
+  longBreak: 'moon',
+};
+
 // Evita la doble solicitud si el efecto del primer arranque se ejecuta dos
 // veces en la misma sesión de JS (montaje doble en desarrollo).
 let permissionRequestStarted = false;
 
+const greeting = (): string => {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Buenos días';
+  if (hour < 19) return 'Buenas tardes';
+  return 'Buenas noches';
+};
+
 export default function HomeScreen() {
   const session = usePomodoroSession();
+  const [confirmReset, setConfirmReset] = useState(false);
 
   // RF-01 y RF-02 (Decisión 001; spec 006): primer arranque directo al
   // temporizador; el permiso de notificaciones se solicita una sola vez al
@@ -55,25 +78,19 @@ export default function HomeScreen() {
 
   const timeText = formatRemaining(session.remaining, session.timer.durationMs);
 
-  const onResetPress = useCallback(() => {
-    Alert.alert('¿Reiniciar el temporizador?', undefined, [
-      { text: 'Cancelar', style: 'cancel' },
-      { text: 'Reiniciar', style: 'destructive', onPress: () => session.reset() },
-    ]);
-  }, [session]);
-
   const onControlPress = useCallback(
     (control: string) => {
       if (control === 'start') session.start();
       else if (control === 'pause') session.pause();
       else if (control === 'resume') session.resume();
-      else if (control === 'reset') onResetPress();
+      else if (control === 'reset') setConfirmReset(true);
     },
-    [session, onResetPress],
+    [session],
   );
 
   const summary = session.summary;
-  const phaseText = phaseLabel(session.cycle.phase);
+  const phase = session.cycle.phase;
+  const phaseText = phaseLabel(phase);
   const counterText = pomodoroText(session.cycle, session.pomodorosPerCycle);
 
   const alarmActive = session.alarmActive;
@@ -82,80 +99,121 @@ export default function HomeScreen() {
   const alarmNextText = alarmContent
     ? `Siguiente: ${alarmContent.nextPhaseLabel}`
     : '';
+  // Mientras suena el aviso, la acción se llama "Continuar"; si la fase que
+  // terminó fue el descanso largo, el ciclo se cierra y se ofrece "Finalizar"
+  // (cambio visual autorizado el 20/10/2026; el comportamiento de detener el
+  // aviso y pasar a la siguiente fase es el mismo de la spec 004).
+  const cycleCompleted = alarmContent?.endedPhase === 'longBreak';
+
+  // Acota el mostrado al tope vigente: nunca más puntos encendidos que los
+  // configurados, aunque el contador real lo supere (cambio de ajuste a mitad
+  // de ciclo; RF-09 de la spec 005).
+  const shownPomodoros = Math.min(
+    session.cycle.pomodoros,
+    session.pomodorosPerCycle,
+  );
+  const dots = Array.from({ length: session.pomodorosPerCycle }, (_, i) => i);
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-      <View style={styles.container}>
-        <View style={styles.timerCard}>
-          <View style={styles.progressBlock}>
-            <Text
-              style={styles.phaseText}
-              accessibilityLabel={`Fase actual ${alarmActive ? alarmPhaseText : phaseText}`}
-            >
-              {alarmActive ? alarmPhaseText : phaseText}
-            </Text>
-            <Text style={styles.counterText} accessibilityLabel={counterText}>
-              {counterText}
-            </Text>
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <ScrollView
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.header}>
+          <View style={styles.headerText}>
+            <Text style={styles.greeting}>{greeting()}</Text>
+            <Text style={styles.subtitle}>Es hora de enfocarte en tus estudios</Text>
           </View>
+          <View style={styles.headerIcon} accessibilityElementsHidden>
+            <Ionicons name="school" size={24} color={Brand.gold} />
+          </View>
+        </View>
 
-          {alarmActive ? (
-            <View style={styles.alarmBlock}>
-              <Text
-                style={styles.alarmTitle}
-                accessibilityLabel={`Aviso activo, fase terminada ${alarmPhaseText}`}
-              >
-                {`${alarmPhaseText} terminado`}
-              </Text>
-              <Text
-                style={styles.alarmNext}
-                accessibilityLabel={alarmNextText}
-              >
-                {alarmNextText}
-              </Text>
+        <View style={styles.timerCard}>
+          {!session.loaded ? (
+            <View style={styles.skeletonBlock} accessibilityLabel="Cargando temporizador">
+              <Skeleton width={160} height={20} />
+              <Skeleton width={220} height={64} radius={16} />
+              <Skeleton width={200} height={48} radius={24} />
             </View>
           ) : (
-            <Text style={styles.time} accessibilityLabel={`Tiempo restante ${timeText}`}>
-              {timeText}
-            </Text>
-          )}
+            <>
+              <View style={styles.progressBlock}>
+                <View style={styles.phaseBadge}>
+                  <Ionicons
+                    name={PHASE_ICONS[phase] ?? 'book'}
+                    size={18}
+                    color={Brand.gold}
+                  />
+                  <Text
+                    style={styles.phaseText}
+                    accessibilityLabel={`Fase actual ${alarmActive ? alarmPhaseText : phaseText}`}
+                  >
+                    {alarmActive ? alarmPhaseText : phaseText}
+                  </Text>
+                </View>
+                <Text style={styles.counterText} accessibilityLabel={counterText}>
+                  {counterText}
+                </Text>
+                <View style={styles.dotsRow} accessibilityElementsHidden>
+                  {dots.map((i) => (
+                    <View
+                      key={`dot-${i}`}
+                      style={[styles.dot, i < shownPomodoros && styles.dotDone]}
+                    />
+                  ))}
+                </View>
+              </View>
 
-          <View style={styles.controlsRow}>
-            {alarmActive ? (
-              <Pressable
-                onPress={session.stopAlarm}
-                accessibilityRole="button"
-                accessibilityLabel="Detener"
-                style={({ pressed }) => [
-                  styles.button,
-                  styles.buttonGold,
-                  pressed && styles.buttonPressed,
-                ]}
-              >
-                <Text style={styles.buttonLabel}>Detener</Text>
-              </Pressable>
-            ) : (
-              session.controls.map((control) => (
-                <Pressable
-                  key={control}
-                  onPress={() => onControlPress(control)}
-                  accessibilityRole="button"
-                  accessibilityLabel={CONTROL_LABELS[control] ?? control}
-                  style={({ pressed }) => [
-                    styles.button,
-                    control === 'reset' ? styles.buttonGold : styles.buttonNavy,
-                    pressed && styles.buttonPressed,
-                  ]}
-                >
-                  <Text style={styles.buttonLabel}>{CONTROL_LABELS[control] ?? control}</Text>
-                </Pressable>
-              ))
-            )}
-          </View>
+              {alarmActive ? (
+                <View style={styles.alarmBlock}>
+                  <Ionicons name="notifications" size={40} color={Brand.gold} />
+                  <Text
+                    style={styles.alarmTitle}
+                    accessibilityLabel={`Aviso activo, fase terminada ${alarmPhaseText}`}
+                  >
+                    {`${alarmPhaseText} terminado`}
+                  </Text>
+                  <Text style={styles.alarmNext} accessibilityLabel={alarmNextText}>
+                    {alarmNextText}
+                  </Text>
+                </View>
+              ) : (
+                <Text style={styles.time} accessibilityLabel={`Tiempo restante ${timeText}`}>
+                  {timeText}
+                </Text>
+              )}
+
+              <View style={styles.controlsRow}>
+                {alarmActive ? (
+                  <BrandButton
+                    label={cycleCompleted ? 'Finalizar' : 'Continuar'}
+                    icon={cycleCompleted ? 'trophy' : 'play'}
+                    variant="gold"
+                    onPress={session.stopAlarm}
+                  />
+                ) : (
+                  session.controls.map((control) => (
+                    <BrandButton
+                      key={control}
+                      label={CONTROL_LABELS[control] ?? control}
+                      icon={CONTROL_ICONS[control]}
+                      variant={control === 'reset' ? 'gold' : 'navy'}
+                      onPress={() => onControlPress(control)}
+                    />
+                  ))
+                )}
+              </View>
+            </>
+          )}
         </View>
 
         {session.permissionMessage ? (
           <View style={styles.permissionCard}>
+            <View style={styles.permissionIcon}>
+              <Ionicons name="notifications-off" size={22} color={Brand.white} />
+            </View>
             <Text
               style={styles.permissionText}
               accessibilityLabel={session.permissionMessage}
@@ -165,155 +223,265 @@ export default function HomeScreen() {
           </View>
         ) : null}
 
-        {/* [DIAG TEMPORAL] Forzar vencimiento para probar el aviso sin esperar. */}
-        <Pressable
-          onPress={session.diagForceExpire}
-          accessibilityRole="button"
-          accessibilityLabel="Diagnóstico: forzar fin de fase"
-          style={({ pressed }) => [
-            styles.button,
-            styles.diagButton,
-            pressed && styles.buttonPressed,
-          ]}
-        >
-          <Text style={styles.buttonLabel}>[DIAG] Forzar fin de fase</Text>
-        </Pressable>
-
         <View style={styles.summaryCard}>
-          {summary.type === 'empty' ? (
-            <Text style={styles.summaryText}>Aún no hay sesiones de estudio registradas.</Text>
+          {!session.loaded ? (
+            <Skeleton height={40} radius={12} />
+          ) : summary.type === 'empty' ? (
+            <View style={styles.emptyRow}>
+              <Ionicons name="time-outline" size={24} color={Brand.white} />
+              <Text style={styles.emptyText}>
+                Aún no hay sesiones de estudio registradas.
+              </Text>
+            </View>
           ) : (
-            <Text style={styles.summaryText}>
-              {`Completadas: ${summary.completed} · Incompletas: ${summary.incomplete} · Última sesión de estudio: ${new Date(summary.startMs).toLocaleDateString()}`}
-            </Text>
+            <>
+              <View style={styles.statsRow}>
+                <View style={styles.stat}>
+                  <Ionicons name="checkmark-circle" size={24} color={Brand.gold} />
+                  <Text style={styles.statValue}>{summary.completed}</Text>
+                  <Text style={styles.statLabel}>Completadas</Text>
+                </View>
+                <View style={styles.statDivider} />
+                <View style={styles.stat}>
+                  <Ionicons name="close-circle" size={24} color={Brand.white} />
+                  <Text style={styles.statValue}>{summary.incomplete}</Text>
+                  <Text style={styles.statLabel}>Incompletas</Text>
+                </View>
+              </View>
+              <Text style={styles.lastSession}>
+                {`Última sesión de estudio: ${new Date(summary.startMs).toLocaleDateString()}`}
+              </Text>
+            </>
           )}
         </View>
-      </View>
+
+        {/* [DIAG TEMPORAL] Forzar vencimiento para probar el aviso sin esperar. */}
+        <BrandButton
+          label="[DIAG] Forzar fin de fase"
+          accessibilityLabel="Diagnóstico: forzar fin de fase"
+          bordered
+          onPress={session.diagForceExpire}
+        />
+      </ScrollView>
+
+      <BrandDialog
+        visible={confirmReset}
+        icon="refresh-circle"
+        title="¿Reiniciar el temporizador?"
+        confirmLabel="Reiniciar"
+        onCancel={() => setConfirmReset(false)}
+        onConfirm={() => {
+          setConfirmReset(false);
+          session.reset();
+        }}
+      />
     </SafeAreaView>
   );
 }
 
+const GLASS = 'rgba(255, 255, 255, 0.12)';
+const GLASS_BORDER = 'rgba(255, 255, 255, 0.18)';
+
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: BRAND_NAVY,
+    backgroundColor: Brand.navy,
   },
   container: {
+    paddingHorizontal: Spacing.four,
+    paddingTop: Spacing.three,
+    paddingBottom: Spacing.five,
+    gap: Spacing.four,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: Spacing.three,
+  },
+  headerText: {
     flex: 1,
-    paddingHorizontal: 24,
-    gap: 24,
+    gap: Spacing.one,
+  },
+  greeting: {
+    color: Brand.white,
+    fontSize: 28,
+    fontWeight: '700',
+  },
+  subtitle: {
+    color: Brand.white,
+    opacity: 0.7,
+    fontSize: 16,
+    fontWeight: '400',
+  },
+  headerIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: GLASS,
+    borderWidth: 1,
+    borderColor: GLASS_BORDER,
+    alignItems: 'center',
     justifyContent: 'center',
   },
   timerCard: {
-    backgroundColor: BRAND_WHITE,
-    borderRadius: 28,
-    paddingVertical: 40,
-    paddingHorizontal: 24,
+    backgroundColor: Brand.white,
+    borderRadius: Radii.card,
+    paddingVertical: Spacing.five,
+    paddingHorizontal: Spacing.four,
     alignItems: 'center',
-    gap: 32,
-    shadowColor: '#000000',
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 6,
+    gap: Spacing.four,
+    ...Shadows.card,
+  },
+  skeletonBlock: {
+    alignItems: 'center',
+    gap: Spacing.four,
+    paddingVertical: Spacing.three,
   },
   progressBlock: {
     alignItems: 'center',
-    gap: 4,
+    gap: Spacing.two,
+  },
+  phaseBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    backgroundColor: Brand.navy,
+    paddingVertical: Spacing.two,
+    paddingHorizontal: Spacing.three,
+    borderRadius: 999,
   },
   phaseText: {
-    color: BRAND_NAVY,
-    fontSize: 20,
+    color: Brand.white,
+    fontSize: 16,
     fontWeight: '700',
   },
   counterText: {
-    color: BRAND_GOLD,
-    fontSize: 18,
-    fontWeight: '600',
+    color: Brand.navy,
+    opacity: 0.7,
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  dotsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: Spacing.two,
+  },
+  dot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: Brand.navy,
+  },
+  dotDone: {
+    backgroundColor: Brand.gold,
+    borderColor: Brand.gold,
   },
   time: {
     fontFamily: Fonts?.mono,
     fontSize: 64,
     fontWeight: '700',
-    color: BRAND_NAVY,
+    color: Brand.navy,
     letterSpacing: 2,
   },
   alarmBlock: {
     alignItems: 'center',
-    gap: 8,
+    gap: Spacing.two,
   },
   alarmTitle: {
-    color: BRAND_NAVY,
+    color: Brand.navy,
     fontSize: 28,
     fontWeight: '700',
     textAlign: 'center',
   },
   alarmNext: {
-    color: BRAND_GOLD,
-    fontSize: 20,
-    fontWeight: '600',
+    color: Brand.navy,
+    opacity: 0.7,
+    fontSize: 18,
+    fontWeight: '500',
     textAlign: 'center',
   },
   controlsRow: {
     flexDirection: 'row',
-    gap: 16,
+    gap: Spacing.three,
     flexWrap: 'wrap',
     justifyContent: 'center',
   },
-  button: {
-    minWidth: 120,
-    minHeight: 48,
-    paddingHorizontal: 24,
-    borderRadius: 24,
+  summaryCard: {
+    backgroundColor: GLASS,
+    borderWidth: 1,
+    borderColor: GLASS_BORDER,
+    borderRadius: Radii.card,
+    paddingVertical: Spacing.three,
+    paddingHorizontal: Spacing.four,
+    gap: Spacing.three,
+  },
+  emptyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+  },
+  emptyText: {
+    flex: 1,
+    color: Brand.white,
+    fontSize: 16,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  stat: {
+    flex: 1,
+    alignItems: 'center',
+    gap: Spacing.one,
+  },
+  statValue: {
+    color: Brand.white,
+    fontSize: 28,
+    fontWeight: '700',
+  },
+  statLabel: {
+    color: Brand.white,
+    opacity: 0.7,
+    fontSize: 14,
+    fontWeight: '400',
+  },
+  statDivider: {
+    width: 1,
+    alignSelf: 'stretch',
+    backgroundColor: GLASS_BORDER,
+  },
+  lastSession: {
+    color: Brand.white,
+    opacity: 0.7,
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  permissionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+    backgroundColor: Brand.white,
+    borderRadius: Radii.button,
+    paddingVertical: Spacing.three,
+    paddingHorizontal: Spacing.three,
+    borderLeftWidth: 6,
+    borderLeftColor: Brand.gold,
+    ...Shadows.cardSoft,
+  },
+  permissionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Brand.navy,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  buttonNavy: {
-    backgroundColor: BRAND_NAVY,
-  },
-  buttonGold: {
-    backgroundColor: BRAND_GOLD,
-  },
-  diagButton: {
-    backgroundColor: BRAND_NAVY,
-    borderWidth: 2,
-    borderColor: BRAND_GOLD,
-  },
-  buttonPressed: {
-    opacity: 0.75,
-  },
-  buttonLabel: {
-    color: BRAND_WHITE,
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  summaryCard: {
-    backgroundColor: BRAND_WHITE,
-    borderRadius: 24,
-    paddingVertical: 20,
-    paddingHorizontal: 24,
-    shadowColor: '#000000',
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
-  },
-  permissionCard: {
-    backgroundColor: BRAND_WHITE,
-    borderRadius: 24,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderWidth: 2,
-    borderColor: BRAND_GOLD,
-  },
   permissionText: {
-    color: BRAND_NAVY,
+    flex: 1,
+    color: Brand.navy,
     fontSize: 16,
-    textAlign: 'center',
-  },
-  summaryText: {
-    color: BRAND_NAVY,
-    fontSize: 16,
-    textAlign: 'center',
   },
 });

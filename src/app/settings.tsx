@@ -1,12 +1,10 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  Alert,
   AppState,
   KeyboardAvoidingView,
   Linking,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -24,12 +22,10 @@ import {
 } from '@/domain/settings';
 import { useSettings } from '@/hooks/use-settings';
 import { getPermissionStatus } from '@/services/notifications';
-
-const BRAND_NAVY = '#181759';
-const BRAND_GOLD = '#C69214';
-const BRAND_WHITE = '#FFFFFF';
-// Rojo reservado al mensaje de validación junto al campo (Decisión 005).
-const ERROR_RED = '#C62828';
+import { Brand, Radii, Shadows, Spacing, ValidationError } from '@/constants/theme';
+import { BrandButton } from '@/components/brand-button';
+import { BrandDialog } from '@/components/brand-dialog';
+import { Skeleton } from '@/components/skeleton';
 
 const FIELDS: ReadonlyArray<{ field: SettingsField; label: string }> = [
   { field: 'studyMinutes', label: 'Estudio (min)' },
@@ -53,13 +49,14 @@ const settingsToInput = (settings: PomodoroSettings): SettingsInput => ({
 });
 
 export default function SettingsScreen() {
-  const { settings, saveSettings } = useSettings();
+  const { settings, saveSettings, loaded } = useSettings();
   const [input, setInput] = useState<SettingsInput>(() =>
     settingsToInput(settings),
   );
   const [errors, setErrors] = useState<Record<SettingsField, string | null>>(
     NO_ERRORS,
   );
+  const [resetDialogVisible, setResetDialogVisible] = useState(false);
 
   // RF-04 (Decisión 009): null = aún desconocido; la opción «Activar avisos»
   // solo se muestra cuando el permiso de notificaciones NO está concedido
@@ -111,23 +108,21 @@ export default function SettingsScreen() {
   }, [input, saveSettings]);
 
   // RF-06 (Decisión 008): "Restablecer" solo rellena la pantalla; persiste
-  // recién al pulsar "Guardar".
+  // recién al pulsar "Guardar". La confirmación usa el diálogo propio
+  // BrandDialog (patrón `mejorar-UI`) en lugar de Alert.alert, según la
+  // autorización del usuario en sesión; textos y acciones son los mismos.
   const onResetPress = useCallback(() => {
-    Alert.alert(
-      '¿Restablecer los tiempos?',
-      'Los campos volverán a 25/5/15/4. Se guardarán solo si pulsas "Guardar".',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Restablecer',
-          style: 'destructive',
-          onPress: () => {
-            setInput(resetSettingsInput());
-            setErrors(NO_ERRORS);
-          },
-        },
-      ],
-    );
+    setResetDialogVisible(true);
+  }, []);
+
+  const onResetCancel = useCallback(() => {
+    setResetDialogVisible(false);
+  }, []);
+
+  const onResetConfirm = useCallback(() => {
+    setResetDialogVisible(false);
+    setInput(resetSettingsInput());
+    setErrors(NO_ERRORS);
   }, []);
 
   // RF-11 (Decisión 008 y 013): abre los ajustes del sistema para habilitar
@@ -153,7 +148,8 @@ export default function SettingsScreen() {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.card}>
+          {/* Cabecera: título (Bold) sobre azul marino + subtítulo breve. */}
+          <View style={styles.header}>
             <Text
               style={styles.title}
               accessibilityRole="header"
@@ -161,7 +157,10 @@ export default function SettingsScreen() {
             >
               Ajustes
             </Text>
+            <Text style={styles.subtitle}>Configura los tiempos de tu método Pomodoro</Text>
+          </View>
 
+          <View style={styles.card}>
             {FIELDS.map(({ field, label }) => {
               const error = errors[field];
               return (
@@ -169,13 +168,17 @@ export default function SettingsScreen() {
                   <Text style={styles.label} accessibilityRole="text">
                     {label}
                   </Text>
-                  <TextInput
-                    style={[styles.input, error !== null && styles.inputError]}
-                    value={input[field]}
-                    onChangeText={(value) => onFieldChange(field, value)}
-                    keyboardType="number-pad"
-                    accessibilityLabel={label}
-                  />
+                  {loaded ? (
+                    <TextInput
+                      style={[styles.input, error !== null && styles.inputError]}
+                      value={input[field]}
+                      onChangeText={(value) => onFieldChange(field, value)}
+                      keyboardType="number-pad"
+                      accessibilityLabel={label}
+                    />
+                  ) : (
+                    <Skeleton height={48} radius={Radii.input} />
+                  )}
                   {error !== null ? (
                     <Text
                       style={styles.errorText}
@@ -189,52 +192,45 @@ export default function SettingsScreen() {
             })}
 
             <View style={styles.buttonsRow}>
-              <Pressable
+              <BrandButton
+                label="Guardar"
+                icon="save"
                 onPress={onSave}
-                accessibilityRole="button"
-                accessibilityLabel="Guardar"
-                style={({ pressed }) => [
-                  styles.button,
-                  styles.buttonNavy,
-                  pressed && styles.buttonPressed,
-                ]}
-              >
-                <Text style={styles.buttonLabel}>Guardar</Text>
-              </Pressable>
-              <Pressable
+                disabled={!loaded}
+              />
+              <BrandButton
+                label="Restablecer"
+                icon="refresh"
+                variant="gold"
                 onPress={onResetPress}
-                accessibilityRole="button"
-                accessibilityLabel="Restablecer"
-                style={({ pressed }) => [
-                  styles.button,
-                  styles.buttonGold,
-                  pressed && styles.buttonPressed,
-                ]}
-              >
-                <Text style={styles.buttonLabel}>Restablecer</Text>
-              </Pressable>
+                disabled={!loaded}
+              />
             </View>
 
             {/* RF-04 y RF-12 (Decisión 009 y 012): solo cuando los avisos no
                 están concedidos. Texto visible exacto «Activar avisos». */}
             {alertsGranted === false ? (
               <View style={styles.buttonsRow}>
-                <Pressable
+                <BrandButton
+                  label="Activar avisos"
+                  icon="notifications"
+                  variant="gold"
                   onPress={onActivateAlerts}
-                  accessibilityRole="button"
-                  accessibilityLabel="Activar avisos"
-                  style={({ pressed }) => [
-                    styles.button,
-                    styles.buttonGold,
-                    pressed && styles.buttonPressed,
-                  ]}
-                >
-                  <Text style={styles.buttonLabel}>Activar avisos</Text>
-                </Pressable>
+                />
               </View>
             ) : null}
           </View>
         </ScrollView>
+
+        <BrandDialog
+          visible={resetDialogVisible}
+          icon="bulb"
+          title="¿Restablecer los tiempos?"
+          message={'Los campos volverán a 25/5/15/4. Se guardarán solo si pulsas "Guardar".'}
+          confirmLabel="Restablecer"
+          onCancel={onResetCancel}
+          onConfirm={onResetConfirm}
+        />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -243,7 +239,7 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: BRAND_NAVY,
+    backgroundColor: Brand.navy,
   },
   flex: {
     flex: 1,
@@ -254,80 +250,65 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    padding: 24,
-    gap: 24,
+    padding: Spacing.four,
+    gap: Spacing.four,
+  },
+  header: {
+    alignItems: 'center',
+    gap: Spacing.two,
   },
   card: {
-    backgroundColor: BRAND_WHITE,
-    borderRadius: 28,
-    paddingVertical: 32,
-    paddingHorizontal: 24,
-    gap: 20,
-    shadowColor: '#000000',
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 6,
+    backgroundColor: Brand.white,
+    borderRadius: Radii.card,
+    paddingVertical: Spacing.five,
+    paddingHorizontal: Spacing.four,
+    gap: Spacing.three,
+    ...Shadows.card,
   },
   title: {
-    color: BRAND_NAVY,
+    color: Brand.white,
     fontSize: 24,
     fontWeight: '700',
     textAlign: 'center',
   },
+  subtitle: {
+    color: Brand.white,
+    opacity: 0.75,
+    fontSize: 16,
+    fontWeight: '400',
+    textAlign: 'center',
+  },
   fieldBlock: {
-    gap: 6,
+    gap: Spacing.two,
   },
   label: {
-    color: BRAND_NAVY,
+    color: Brand.navy,
     fontSize: 16,
     fontWeight: '600',
   },
   input: {
     minHeight: 48,
     borderWidth: 2,
-    borderColor: BRAND_NAVY,
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    borderColor: Brand.navy,
+    borderRadius: Radii.input,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
     fontSize: 18,
-    color: BRAND_NAVY,
-    backgroundColor: BRAND_WHITE,
+    color: Brand.navy,
+    backgroundColor: Brand.white,
   },
   inputError: {
-    borderColor: ERROR_RED,
+    borderColor: ValidationError,
   },
   errorText: {
-    color: ERROR_RED,
+    color: ValidationError,
     fontSize: 14,
     fontWeight: '600',
   },
   buttonsRow: {
     flexDirection: 'row',
-    gap: 16,
+    gap: Spacing.three,
     flexWrap: 'wrap',
     justifyContent: 'center',
-  },
-  button: {
-    minWidth: 120,
-    minHeight: 48,
-    paddingHorizontal: 24,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  buttonNavy: {
-    backgroundColor: BRAND_NAVY,
-  },
-  buttonGold: {
-    backgroundColor: BRAND_GOLD,
-  },
-  buttonPressed: {
-    opacity: 0.75,
-  },
-  buttonLabel: {
-    color: BRAND_WHITE,
-    fontSize: 18,
-    fontWeight: '600',
   },
 });
